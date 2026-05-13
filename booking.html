@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Book Property - Safar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{ margin:0; padding:0; box-sizing:border-box; font-family:Arial,sans-serif; }
+body{ background:#f4f4f4; }
+nav{ background:#111; color:white; padding:15px 50px; display:flex; justify-content:space-between; }
+nav h2{ color:orange; }
+nav button{ padding:8px 15px; background:orange; border:none; color:white; cursor:pointer; border-radius:5px; }
+.container{ padding:40px 60px; display:flex; gap:40px; flex-wrap:wrap; }
+.property-preview{ flex:1; min-width:300px; background:white; padding:20px; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1); }
+.property-preview img{ width:100%; height:220px; object-fit:cover; border-radius:10px; }
+.price{ color:green; font-weight:bold; margin:10px 0; }
+.booking-form{ flex:1; min-width:300px; background:white; padding:20px; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1); }
+label{ display:block; margin-top:12px; font-size:14px; color:#555; }
+input{ width:100%; padding:10px; margin-top:6px; border:1px solid #ccc; border-radius:5px; font-size:14px; }
+input:focus{ outline:none; border-color:orange; }
+hr{ margin:15px 0; border-color:#eee; }
+button.primary{ padding:12px 20px; background:orange; border:none; color:white; cursor:pointer; border-radius:5px; margin-top:14px; font-size:15px; font-weight:bold; width:100%; }
+button.primary:hover{ background:darkorange; }
+button.primary:disabled{ background:#aaa; cursor:not-allowed; }
+.success{ color:green; margin-top:12px; font-weight:bold; font-size:15px; }
+.error{ color:red; margin-top:10px; font-size:14px; }
+.bargain-note{ background:#fff8e1; border-left:4px solid orange; padding:10px 14px; border-radius:5px; font-size:13px; color:#666; margin-top:10px; }
+
+/* ── QR PAYMENT MODAL ── */
+.modal-overlay{ display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center; }
+.modal-overlay.show{ display:flex; }
+.modal{ background:white; border-radius:16px; padding:36px 40px; max-width:440px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+.modal h2{ font-size:22px; margin-bottom:6px; color:#111; }
+.modal p{ color:#666; font-size:14px; margin-bottom:20px; }
+.qr-box{ width:220px; height:220px; margin:0 auto 18px; border:3px solid orange; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:#fff; }
+.qr-box svg{ width:200px; height:200px; }
+.amount-tag{ font-size:28px; font-weight:bold; color:#222; margin-bottom:6px; }
+.upi-id{ font-size:13px; color:#888; margin-bottom:20px; }
+.pay-steps{ text-align:left; background:#f9f9f9; border-radius:8px; padding:14px 18px; margin-bottom:20px; font-size:13px; line-height:2; color:#555; }
+.btn-paid{ padding:13px; background:#10b981; border:none; color:white; border-radius:8px; cursor:pointer; font-size:16px; font-weight:bold; width:100%; margin-bottom:10px; }
+.btn-paid:hover{ background:#059669; }
+.btn-cancel-pay{ padding:10px; background:transparent; border:1px solid #ccc; color:#666; border-radius:8px; cursor:pointer; font-size:14px; width:100%; }
+.spinner{ display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.4); border-top-color:white; border-radius:50%; animation:spin 0.6s linear infinite; margin-right:6px; vertical-align:middle; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<nav>
+    <h2>Safar Booking</h2>
+    <button onclick="goBack()">← Back</button>
+</nav>
+
+<div class="container">
+
+    <div class="property-preview">
+        <img id="propertyImage" src="" alt="Property">
+        <h3 id="propertyName"></h3>
+        <p class="price">₹<span id="propertyPrice"></span> per night</p>
+        <p id="propertyDesc" style="color:#777;font-size:13px;margin-top:6px;"></p>
+    </div>
+
+    <div class="booking-form">
+        <h3>Book Your Stay</h3>
+
+        <label>Check-in Date</label>
+        <input type="date" id="checkin">
+
+        <label>Check-out Date</label>
+        <input type="date" id="checkout">
+
+        <label>Guests</label>
+        <input type="number" id="guests" min="1" value="1">
+
+        <hr>
+        <h3>💬 Bargain With Owner</h3>
+        <div class="bargain-note">You can offer a lower price. The owner may accept, reject, or counter-offer your price.</div>
+        <label>Your Offer Price (₹ per night — optional)</label>
+        <input type="number" id="offerPrice" placeholder="Leave blank to book at listed price">
+
+        <div class="error"   id="errMsg"></div>
+        <div class="success" id="successMsg"></div>
+
+        <button class="primary" id="bookBtn" onclick="submitBooking()">Send Booking Request</button>
+    </div>
+
+</div>
+
+<!-- ── QR Payment Modal ── -->
+<div class="modal-overlay" id="payModal">
+    <div class="modal">
+        <h2>💳 Pay via QR / UPI</h2>
+        <p>Scan the QR code with any UPI app (PhonePe, GPay, Paytm, etc.)</p>
+        <div class="amount-tag">₹<span id="payAmount">0</span></div>
+        <div class="upi-id">UPI ID: safar-payments@okaxis</div>
+        <div class="qr-box">
+            <!-- Dynamic SVG QR — realistic UPI QR pattern -->
+            <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" id="qrSvg"></svg>
+        </div>
+        <div class="pay-steps">
+            📱 <strong>Step 1:</strong> Open any UPI app<br>
+            📷 <strong>Step 2:</strong> Tap "Scan QR" and scan above<br>
+            ✅ <strong>Step 3:</strong> Confirm ₹<span class="payAmtInline">0</span> payment<br>
+            🔘 <strong>Step 4:</strong> Click "I've Paid" below
+        </div>
+        <button class="btn-paid" id="paidBtn" onclick="confirmPayment()">✅ I've Paid — Confirm Booking</button>
+        <button class="btn-cancel-pay" onclick="closeModal()">Cancel</button>
+    </div>
+</div>
+
+<script>
+    const API = 'http://localhost:3000/api';
+    const currentUser = JSON.parse(sessionStorage.getItem('loggedInUser'));
+    if (!currentUser) { window.location.href = 'login.html'; }
+
+    const property = JSON.parse(sessionStorage.getItem('selectedProperty'));
+    if (!property) { window.location.href = 'properties.html'; }
+
+    document.getElementById('propertyImage').src       = property.image;
+    document.getElementById('propertyName').innerText  = property.name;
+    document.getElementById('propertyPrice').innerText = Number(property.price).toLocaleString();
+    document.getElementById('propertyDesc').innerText  = property.description || '';
+
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('checkin').min  = today;
+    document.getElementById('checkout').min = today;
+
+    let currentBookingId = null;
+
+    // ── Submit booking ────────────────────────────────────
+    async function submitBooking() {
+        const checkin    = document.getElementById('checkin').value;
+        const checkout   = document.getElementById('checkout').value;
+        const guests     = document.getElementById('guests').value;
+        const offerPrice = document.getElementById('offerPrice').value;
+        const errEl      = document.getElementById('errMsg');
+        const okEl       = document.getElementById('successMsg');
+        const btn        = document.getElementById('bookBtn');
+
+        errEl.innerText = ''; okEl.innerText = '';
+
+        if (!checkin || !checkout) { errEl.innerText = 'Please select check-in and check-out dates.'; return; }
+        if (new Date(checkout) <= new Date(checkin)) { errEl.innerText = 'Check-out must be after check-in.'; return; }
+
+        btn.disabled  = true;
+        btn.innerHTML = '<span class="spinner"></span>Sending request…';
+
+        try {
+            const res  = await fetch(`${API}/bookings/hotel`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    user_id:       currentUser.id,
+                    property_name: property.name,
+                    hotel_id:      property.id || null,
+                    original_price:property.price,
+                    offered_price: offerPrice || property.price,
+                    owner_email:   property.owner,
+                    checkin, checkout, guests,
+                    city: sessionStorage.getItem('selectedCity') || ''
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                currentBookingId = data.booking_id;
+                okEl.innerText = '✅ Request sent to owner! You will be notified once accepted.';
+                btn.innerHTML  = 'Request Sent ✓';
+                // If no bargain (full price offered), show QR directly
+                if (!offerPrice || Number(offerPrice) >= Number(property.price)) {
+                    setTimeout(() => showPayModal(property.price, data.booking_id), 1200);
+                }
+            } else {
+                errEl.innerText = data.message || 'Failed.';
+                btn.disabled = false; btn.innerHTML = 'Send Booking Request';
+            }
+        } catch(e) {
+            errEl.innerText = '❌ Cannot reach server.';
+            btn.disabled = false; btn.innerHTML = 'Send Booking Request';
+        }
+    }
+
+    // ── QR Payment Modal ──────────────────────────────────
+    function showPayModal(amount, bookingId) {
+        currentBookingId = bookingId || currentBookingId;
+        const rounded = Math.round(amount);
+        document.getElementById('payAmount').innerText = rounded.toLocaleString();
+        document.querySelectorAll('.payAmtInline').forEach(el => el.innerText = rounded.toLocaleString());
+        generateQR(rounded);
+        document.getElementById('payModal').classList.add('show');
+    }
+
+    function closeModal() { document.getElementById('payModal').classList.remove('show'); }
+
+    async function confirmPayment() {
+        if (!currentBookingId) { alert('No booking found.'); return; }
+        const btn = document.getElementById('paidBtn');
+        btn.disabled  = true;
+        btn.innerHTML = '<span class="spinner"></span>Verifying…';
+        try {
+            const res  = await fetch(`${API}/bookings/hotel/${currentBookingId}/pay`, { method:'PATCH', headers:{'Content-Type':'application/json'} });
+            const data = await res.json();
+            if (data.success) {
+                closeModal();
+                document.getElementById('successMsg').innerText = `🎉 Payment confirmed! Ref: ${data.payment_ref}. Your booking is confirmed!`;
+                document.getElementById('bookBtn').innerText = '✅ Paid & Confirmed';
+            } else {
+                alert('Payment update failed. Please try again.');
+                btn.disabled = false; btn.innerHTML = '✅ I\'ve Paid — Confirm Booking';
+            }
+        } catch(e) {
+            alert('Cannot reach server.'); btn.disabled = false; btn.innerHTML = '✅ I\'ve Paid — Confirm Booking';
+        }
+    }
+
+    // ── Generate QR SVG (realistic UPI-style pattern) ─────
+    function generateQR(amount) {
+        const svg   = document.getElementById('qrSvg');
+        const size  = 200;
+        const cells = 21;
+        const cell  = size / cells;
+        let   html  = '';
+
+        // Seed based on amount for deterministic but varied pattern
+        const seed = amount * 137 + 42;
+        function rng(i) {
+            return ((seed * 1103515245 + (i * 12345)) & 0x7fffffff) % 100;
+        }
+
+        // Background
+        html += `<rect width="200" height="200" fill="white"/>`;
+
+        // Finder patterns (3 corners — classic QR)
+        function finder(x, y) {
+            html += `<rect x="${x}" y="${y}" width="${cell*7}" height="${cell*7}" fill="black" rx="2"/>`;
+            html += `<rect x="${x+cell}" y="${y+cell}" width="${cell*5}" height="${cell*5}" fill="white"/>`;
+            html += `<rect x="${x+cell*2}" y="${y+cell*2}" width="${cell*3}" height="${cell*3}" fill="black" rx="1"/>`;
+        }
+        finder(0,0); finder(size-cell*7,0); finder(0,size-cell*7);
+
+        // Data modules
+        for (let r = 0; r < cells; r++) {
+            for (let c = 0; c < cells; c++) {
+                // Skip finder pattern zones
+                if ((r < 8 && c < 8) || (r < 8 && c > cells-9) || (r > cells-9 && c < 8)) continue;
+                if (rng(r * cells + c) < 45) {
+                    html += `<rect x="${c*cell}" y="${r*cell}" width="${cell}" height="${cell}" fill="black"/>`;
+                }
+            }
+        }
+
+        // Timing patterns
+        for (let i = 8; i < cells-8; i++) {
+            if (i % 2 === 0) {
+                html += `<rect x="${i*cell}" y="${6*cell}" width="${cell}" height="${cell}" fill="black"/>`;
+                html += `<rect x="${6*cell}" y="${i*cell}" width="${cell}" height="${cell}" fill="black"/>`;
+            }
+        }
+
+        // UPI logo overlay
+        html += `<rect x="82" y="82" width="36" height="36" fill="white" rx="4"/>`;
+        html += `<text x="100" y="106" text-anchor="middle" font-size="18" font-weight="bold" fill="#5f2d8e" font-family="Arial">UPI</text>`;
+
+        svg.innerHTML = html;
+    }
+
+    // Expose for userDashboard to call
+    window.showPayModal = showPayModal;
+</script>
+</body>
+</html>

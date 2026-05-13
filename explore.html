@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Explore Cities - Safar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{ margin:0; padding:0; box-sizing:border-box; font-family:Arial,sans-serif; }
+body{ background:#f4f4f4; }
+nav{ background:#111; color:white; padding:15px 50px; display:flex; justify-content:space-between; align-items:center; }
+nav h2{ color:orange; }
+nav button{ padding:8px 15px; background:orange; border:none; cursor:pointer; color:white; border-radius:5px; margin-left:8px; }
+.container{ padding:40px 60px; }
+.filters{ display:flex; gap:20px; margin-bottom:30px; flex-wrap:wrap; align-items:center; }
+select{ padding:10px; border-radius:5px; border:1px solid #ccc; }
+/* ── Tabs ── */
+.tabs{ display:flex; gap:10px; margin-bottom:28px; }
+.tab-btn{ padding:10px 24px; border:2px solid orange; background:white; color:orange; border-radius:5px; cursor:pointer; font-size:15px; font-weight:bold; }
+.tab-btn.active{ background:orange; color:white; }
+/* ── City cards ── */
+.city-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:25px; }
+.card{ background:white; border-radius:10px; overflow:hidden; box-shadow:0 5px 15px rgba(0,0,0,0.1); transition:0.3s; cursor:pointer; }
+.card:hover{ transform:scale(1.04); }
+.card img{ width:100%; height:180px; object-fit:cover; }
+.card-content{ padding:15px; }
+.card-content h3{ margin-bottom:8px; }
+.price{ color:green; font-weight:bold; }
+/* ── Trip cards (from DB) ── */
+.trip-card{ background:white; border-radius:10px; overflow:hidden; box-shadow:0 5px 15px rgba(0,0,0,0.1); transition:0.3s; }
+.trip-card:hover{ transform:scale(1.03); }
+.trip-card img{ width:100%; height:180px; object-fit:cover; }
+.trip-card .card-content{ padding:16px; }
+.trip-card .badge{ display:inline-block; background:#fff3e0; color:orange; font-size:11px; font-weight:bold; border-radius:12px; padding:2px 10px; margin-bottom:8px; }
+.trip-card .organizer{ font-size:12px; color:#888; margin-top:4px; }
+.loading{ text-align:center; padding:40px; color:#888; font-size:16px; }
+.section-note{ font-size:13px; color:#888; margin-bottom:16px; }
+</style>
+</head>
+<body>
+
+<nav>
+    <h2>Safar Explore</h2>
+    <div>
+        <button onclick="goDashboard()">Dashboard</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container">
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" id="tabCities"  onclick="showTab('cities')">🏙️ Browse Cities</button>
+        <button class="tab-btn"        id="tabPackages" onclick="showTab('packages')">🎒 Travel Packages</button>
+    </div>
+
+    <!-- ── CITIES TAB ── -->
+    <div id="citiesSection">
+        <div class="filters">
+            <select id="stateFilter" onchange="filterCities()">
+                <option value="all">All States</option>
+                <option value="Uttarakhand">Uttarakhand</option>
+                <option value="Himachal">Himachal</option>
+            </select>
+            <select id="priceSort" onchange="sortCities()">
+                <option value="default">Sort by Price</option>
+                <option value="low">Low to High</option>
+                <option value="high">High to Low</option>
+            </select>
+        </div>
+        <div class="city-grid" id="cityGrid">
+            <div class="loading">Loading cities…</div>
+        </div>
+    </div>
+
+    <!-- ── PACKAGES TAB (from DB) ── -->
+    <div id="packagesSection" style="display:none;">
+        <p class="section-note">These travel packages are added by verified owners and are updated in real time.</p>
+        <div class="city-grid" id="packagesGrid">
+            <div class="loading">Loading packages from server…</div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const API = 'http://localhost:3000/api';
+    const currentUser = JSON.parse(sessionStorage.getItem('loggedInUser'));
+    if (!currentUser || currentUser.role !== 'user') { window.location.href = 'login.html'; }
+
+    // ── Static city data ──────────────────────────────────
+    const cities = [
+        { name:'Chopta',    state:'Uttarakhand', price:6999, image:'chopta.webp'    },
+        { name:'Dehradun',  state:'Uttarakhand', price:4999, image:'dehradun.jpg'   },
+        { name:'Devprayag', state:'Uttarakhand', price:5999, image:'devprayag.jpeg' },
+        { name:'Dhanaulti', state:'Uttarakhand', price:5499, image:'dhanualti.webp' },
+        { name:'Dharchula', state:'Uttarakhand', price:7999, image:'dharchula.jpg'  },
+        { name:'Rishikesh', state:'Uttarakhand', price:4500, image:'rishikesh.jpg'  },
+        { name:'Harshil',   state:'Himachal',    price:8999, image:'harshil.jpg'    },
+        { name:'Kalpa',     state:'Himachal',    price:8500, image:'kalpa.jpg'      },
+        { name:'Mussoorie', state:'Uttarakhand', price:6500, image:'mussorie.jpg'   },
+        { name:'Sangla',    state:'Himachal',    price:9200, image:'sangla.webp'    }
+    ];
+    let displayedCities = [...cities];
+
+    function displayCities() {
+        const grid = document.getElementById('cityGrid');
+        grid.innerHTML = '';
+        displayedCities.forEach(city => {
+            grid.innerHTML += `
+                <div class="card" onclick="openCity('${city.name}')">
+                    <img src="${city.image}" alt="${city.name}" onerror="this.src='home.webp'">
+                    <div class="card-content">
+                        <h3>${city.name}</h3>
+                        <p>State: ${city.state}</p>
+                        <p class="price">Starting ₹${city.price.toLocaleString()}</p>
+                    </div>
+                </div>`;
+        });
+    }
+
+    function filterCities() {
+        const state = document.getElementById('stateFilter').value;
+        displayedCities = state === 'all' ? [...cities] : cities.filter(c => c.state === state);
+        const sort = document.getElementById('priceSort').value;
+        if (sort === 'low')  displayedCities.sort((a,b) => a.price - b.price);
+        if (sort === 'high') displayedCities.sort((a,b) => b.price - a.price);
+        displayCities();
+    }
+
+    function sortCities() {
+        const val = document.getElementById('priceSort').value;
+        if (val === 'low')  displayedCities.sort((a,b) => a.price - b.price);
+        if (val === 'high') displayedCities.sort((a,b) => b.price - a.price);
+        displayCities();
+    }
+
+    function openCity(cityName) {
+        sessionStorage.setItem('selectedCity', cityName);
+        window.location.href = 'city-landing.html';
+    }
+
+    // ── Load packages from DB (owner-added trips) ─────────
+    async function loadPackages() {
+        const grid = document.getElementById('packagesGrid');
+        try {
+            const res  = await fetch(`${API}/trips`);
+            const data = await res.json();
+
+            if (!data.success || data.trips.length === 0) {
+                grid.innerHTML = '<p style="color:#888;padding:20px;">No packages available yet. Check back soon!</p>';
+                return;
+            }
+
+            grid.innerHTML = '';
+            data.trips.forEach(t => {
+                const img = t.image || 'home.webp';
+                grid.innerHTML += `
+                    <div class="trip-card">
+                        <img src="${img}" alt="${t.title}" onerror="this.src='home.webp'">
+                        <div class="card-content">
+                            <span class="badge">Travel Package</span>
+                            <h3>${t.title}</h3>
+                            <p>📍 ${t.location}</p>
+                            <p class="price">₹${Number(t.price).toLocaleString()}</p>
+                            <p class="organizer">By: ${t.organizer_name || 'Safar Owner'}</p>
+                        </div>
+                    </div>`;
+            });
+        } catch(e) {
+            grid.innerHTML = '<p style="color:red;padding:20px;">❌ Cannot reach server. Make sure backend is running.</p>';
+        }
+    }
+
+    // ── Tabs ──────────────────────────────────────────────
+    function showTab(tab) {
+        document.getElementById('citiesSection').style.display  = tab === 'cities'   ? '' : 'none';
+        document.getElementById('packagesSection').style.display = tab === 'packages' ? '' : 'none';
+        document.getElementById('tabCities').classList.toggle('active',  tab === 'cities');
+        document.getElementById('tabPackages').classList.toggle('active', tab === 'packages');
+        if (tab === 'packages') loadPackages();
+    }
+
+    function goDashboard() { window.location.href = 'userDashboard.html'; }
+    function logout()      { sessionStorage.clear(); window.location.href = 'login.html'; }
+
+    displayCities();
+</script>
+</body>
+</html>
